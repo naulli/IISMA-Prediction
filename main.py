@@ -42,13 +42,13 @@ UserIn_Pydantic = pydantic_model_creator(User, name='UserIn', exclude_readonly=T
 # Service Class
 class GradRequest(BaseModel):
     name: str
-    gre: int
+    score: int
     toefl: int
     university: int
     sop: float
     lor: float
     cgpa: float
-    research: int
+    certificate: int
 # gradPydantic = pydantic_model_creator(GradRequest)
 
 # Routes
@@ -110,11 +110,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
 @app.post('/iisma/')
 async def IISMA_prediction(req: GradRequest, response: Response):
-    if(req.gre < 0 or req.toefl < 0 or req.university < 0 or req.sop < 0 or req.lor < 0 or req.cgpa < 0 or req.research < 0):
+    if(req.score < 0 or req.toefl < 0 or req.university < 0 or req.sop < 0 or req.lor < 0 or req.cgpa < 0 or req.certificate < 0):
         response.status_code = 400
         return {"message": "Fields cannot be less then 0"}
-    df = np.array([req.gre, req.toefl, 6 - req.university,
-                   req.sop, req.lor, req.cgpa, req.research])
+    df = np.array([req.score, req.toefl, 6 - req.university,
+                   req.sop, req.lor, req.cgpa, req.certificate])
 
     new_df = sc.transform(df.reshape(1, -1))
     prediction = grad.predict(new_df)
