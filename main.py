@@ -23,16 +23,10 @@ class User(Model):
     id = fields.IntField(pk=True)
     username = fields.CharField(50, unique=True)
     password_hash = fields.CharField(128)
+    
 
     def verify_password(self, password):
         return bcrypt.verify(password, self.password_hash)
-
-
-
-
-grad = joblib.load("models/grad.joblib")
-sc = joblib.load("models/sc.bin")
-
 
 
 User_Pydantic = pydantic_model_creator(User, name='User')
@@ -49,7 +43,11 @@ class GradRequest(BaseModel):
     lor: float
     cgpa: float
     certificate: int
+
 # gradPydantic = pydantic_model_creator(GradRequest)
+
+grad = joblib.load("models/grad.joblib")
+sc = joblib.load("models/sc.bin")
 
 # Routes
 # router = APIRouter()
@@ -64,6 +62,13 @@ async def authenticate_user(username: str, password: str):
         return False
     return user 
 
+users = []
+
+
+@app.get('/')
+async def root():
+    print(users)
+    return {"18220007 - Joanna Margareth Nauli" : "Selamat datang di laman rekomendasi untuk konsiderasi pendaftaran IISMA!"}
 
 
 @app.post('/users', response_model=User_Pydantic)
@@ -78,6 +83,7 @@ async def create_user(user: UserIn_Pydantic):
 #     if user:
 #         grad_obj = GradRequest(name=grad.name, gre=grad.gre, toefl=grad.toefl, university=grad.university, sop=grad.sop, lor=grad.lor, cgpa=grad.cgpa, research=grad.research)
 #     return await gradPydantic.from_tortoise_orm(grad_obj)
+
 
 @app.post('/token')
 async def generate_token(form_data: OAuth2PasswordRequestForm = Depends()):
@@ -108,8 +114,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     return await User_Pydantic.from_tortoise_orm(user)
 
 
-@app.post('/iisma/')
-async def IISMA_prediction(req: GradRequest, response: Response):
+@app.post('/iisma/', response_model=User_Pydantic)
+async def IISMA_prediction(req: GradRequest, response: Response, user: User_Pydantic = Depends(get_current_user)):
     if(req.score < 0 or req.toefl < 0 or req.university < 0 or req.sop < 0 or req.lor < 0 or req.cgpa < 0 or req.certificate < 0):
         response.status_code = 400
         return {"message": "Fields cannot be less then 0"}
@@ -121,14 +127,13 @@ async def IISMA_prediction(req: GradRequest, response: Response):
     if(prediction[0] > 100):
         prediction[0] = 0.992
         # pred = "Selamat! Anda diterima di program IISMA"
-
         # return {"message": "Selamat! Anda diterima di program IISMA"}
     elif(prediction[0] < 0):
         prediction[0] = 0.0008
         # pred = "Maaf, Anda belum berhasil mengikuti program IISMA. Coba lagi tahun depan!"
-
         # return {"message": "Maaf, Anda belum berhasil mengikuti program IISMA. Coba lagi tahun depan!"}
     return {"name": req.name, "pred": "Kemungkinanmu diterima dalam program IISMA adalah sebesar {}".format(prediction[0])}
+
 
 @app.get('/users/me', response_model=User_Pydantic)
 async def get_user(user: User_Pydantic = Depends(get_current_user)):
@@ -140,7 +145,7 @@ register_tortoise(
     modules={'models': ['main']},
     generate_schemas=True,
     add_exception_handlers=True
-)    
+)
 
 if __name__ == '__main__':
     uvicorn.run('main:app', host='0.0.0.0', port=8080, reload=True)
