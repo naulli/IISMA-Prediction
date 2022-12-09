@@ -114,8 +114,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     return await User_Pydantic.from_tortoise_orm(user)
 
 
-@app.post('/iisma/', response_model=User_Pydantic)
-async def IISMA_prediction(req: GradRequest, response: Response, user: User_Pydantic = Depends(get_current_user)):
+@app.post('/iisma/')
+async def IISMA_prediction(req: GradRequest, response: Response):
     if(req.score < 0 or req.toefl < 0 or req.university < 0 or req.sop < 0 or req.lor < 0 or req.cgpa < 0 or req.certificate < 0):
         response.status_code = 400
         return {"message": "Fields cannot be less then 0"}
