@@ -13,8 +13,12 @@ from tortoise.contrib.fastapi import register_tortoise
 from tortoise.contrib.pydantic import pydantic_model_creator
 from tortoise.models import Model 
 from pydantic import BaseModel
+from jose import JWTError, jwt
+from requests import request
+import uvicorn
 
-app = FastAPI()
+app = FastAPI(title="IISMA Application Prediction API",
+    description="Layanan kalkulasi prediksi kemungkinan mahasiswa diterima dalam program IISMA berdasarkan input nilai, skor TOEFL, ranking universitas, nilai Statement of Purpose (Essay), nilai Letter of Reccomendation (Surat Rekomendasi), nilai Indeks Prestasi Kumulatif (CGPA), dan jumlah sertifikat. Masukkan nilai rentang 1-100 (score), 1-120 (TOEFL), 1-10 (university), 1-5 (SoP & LoR), 0-4 (CGPA), dan angka sesuai jumlah sertifikat yang dimiliki.")
 
 JWT_SECRET = 'myjwtsecret'
 
@@ -49,6 +53,9 @@ class GradRequest(BaseModel):
 grad = joblib.load("models/grad.joblib")
 sc = joblib.load("models/sc.bin")
 
+class request_body(BaseModel):
+    link: str
+
 # Routes
 # router = APIRouter()
 
@@ -65,13 +72,13 @@ async def authenticate_user(username: str, password: str):
 users = []
 
 
-@app.get('/')
+@app.get('/', tags=["Root"])
 async def root():
     print(users)
     return {"18220007 - Joanna Margareth Nauli" : "Selamat datang di laman rekomendasi untuk konsiderasi pendaftaran IISMA!"}
 
 
-@app.post('/users', response_model=User_Pydantic)
+@app.post('/users', response_model=User_Pydantic, tags=["User"])
 async def create_user(user: UserIn_Pydantic):
     user_obj = User(username=user.username, password_hash=bcrypt.hash(user.password_hash))
     await user_obj.save()
@@ -85,7 +92,7 @@ async def create_user(user: UserIn_Pydantic):
 #     return await gradPydantic.from_tortoise_orm(grad_obj)
 
 
-@app.post('/token')
+@app.post('/token', tags=["User"])
 async def generate_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await authenticate_user(form_data.username, form_data.password)
 
@@ -113,9 +120,19 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
     return await User_Pydantic.from_tortoise_orm(user)
 
+def verify_token(token: str):
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+        return payload
+    except JWTError:
+        raise HTTPException(
+            status_code=401,
+            detail="User belum terautentikasi!",
+        )
 
-@app.post('/iisma/')
-async def IISMA_prediction(req: GradRequest, response: Response):
+@app.post('/iisma/', tags=["Core"])
+async def IISMA_prediction(req: GradRequest, response: Response, token:str):
+    user = verify_token(token)
     if(req.score < 0 or req.toefl < 0 or req.university < 0 or req.sop < 0 or req.lor < 0 or req.cgpa < 0 or req.certificate < 0):
         response.status_code = 400
         return {"message": "Fields cannot be less then 0"}
@@ -134,6 +151,19 @@ async def IISMA_prediction(req: GradRequest, response: Response):
         # return {"message": "Maaf, Anda belum berhasil mengikuti program IISMA. Coba lagi tahun depan!"}
     return {"name": req.name, "pred": "Kemungkinanmu diterima dalam program IISMA adalah sebesar {}".format(prediction[0])}
 
+@app.post('/callPredict', tags=["News Validator"])
+def Predict(link: request_body):
+    url = "https://newsclassifiertst.azurewebsites.net/login"
+    user = {
+        "username": "johndoe",
+        "password": "secret"
+    }
+    response = request("POST", url, data=user)
+    print(response.json())
+    access_token = response.json()["access token"]
+    url = "https://newsclassifiertst.azurewebsites.net/predict"
+    response2 = request("POST", url+'/?token='+access_token, data=link.json())
+    return response2.json()
 
 @app.get('/users/me', response_model=User_Pydantic)
 async def get_user(user: User_Pydantic = Depends(get_current_user)):
@@ -148,4 +178,4 @@ register_tortoise(
 )
 
 if __name__ == '__main__':
-    uvicorn.run('main:app', host='0.0.0.0', port=8080, reload=True)
+    uvicorn.run('main:app', host='0.0.0.0', port=8000)
